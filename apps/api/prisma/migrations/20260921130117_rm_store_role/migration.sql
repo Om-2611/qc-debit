@@ -1,0 +1,5 @@
+-- AlterEnum
+ALTER TYPE "ReportStatus" ADD VALUE 'INVOICE_ENTERED';
+
+-- AlterEnum
+ALTER TYPE "Role" ADD VALUE 'RM_STORE';

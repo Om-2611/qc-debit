@@ -1,0 +1,48 @@
+# Production: app + database. Put real values in a `.env.production` file next to this one
+# (see README "Deploying") and run:  docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Terminate HTTPS in front of the app (nginx / Caddy / a load balancer). The refresh cookie is
+# marked Secure in production, so the site MUST be served over HTTPS for logins to persist.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-7}
+      WEB_ORIGIN: ${WEB_ORIGIN}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@dalmiapolypro.in}
+    ports:
+      - "${APP_PORT:-4000}:4000"
+    volumes:
+      - import_previews:/app/apps/api/tmp
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: Asia/Kolkata
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Not published to the host: only the app container can reach the database.
+
+volumes:
+  pgdata:
+  import_previews:

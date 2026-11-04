@@ -1,0 +1,167 @@
+/* The CSS variables themselves are written to :root from tokens.ts (single source of truth). */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+
+/* Money and quantity columns */
+.num {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Website-style small section label, e.g. "A) DISCRETIONARY" above a section title.
+   Doubled selector so it outranks MUI Typography's single-class styles. */
+.section-label.section-label {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* ---------- dense data-entry grids (report page) ---------- */
+.sheet-scroll {
+  overflow-x: auto;
+}
+
+.sheet {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.8125rem;
+}
+
+.sheet th,
+.sheet td {
+  border-bottom: 1px solid var(--border);
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.sheet thead th {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-align: right;
+  vertical-align: bottom;
+}
+
+.sheet thead th:first-child,
+.sheet tbody th {
+  text-align: left;
+}
+
+.sheet tbody th {
+  font-weight: 600;
+  position: sticky;
+  left: 0;
+  background: inherit;
+  z-index: 1;
+}
+
+.sheet tbody tr {
+  background: #fff;
+}
+
+.sheet tbody tr:nth-of-type(even) {
+  background: var(--bg-surface);
+}
+
+.sheet td.num,
+.sheet th.num {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.sheet tr.group-row th {
+  background: #fff;
+  padding-top: 12px;
+}
+
+.sheet tr.subtotal-row,
+.sheet tr.subtotal-row th {
+  background: var(--brand-primary-light) !important;
+  font-weight: 700;
+}
+
+.sheet tr.total-row,
+.sheet tr.total-row th {
+  background: var(--brand-primary) !important;
+  color: #fff;
+  font-weight: 700;
+}
+
+.sheet .over-norm {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.sheet .within-norm {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.sheet .negative {
+  color: var(--danger);
+}
+
+.sheet .muted {
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+}
+
+.cell-input {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8125rem;
+  text-align: right;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  background: #fff;
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.cell-input.text {
+  font-family: var(--font-body);
+  text-align: left;
+}
+
+.cell-input:hover:not(:disabled) {
+  border-color: var(--brand-primary-mid);
+}
+
+.cell-input:focus {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: -1px;
+  border-color: var(--brand-primary);
+}
+
+.cell-input:disabled {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-primary);
+  -webkit-text-fill-color: var(--text-primary);
+  opacity: 1;
+}
+
+/* Subtotal / total labels span many columns; keeping them sticky would slide over the figures when scrolled sideways. */
+.sheet tr.subtotal-row th,
+.sheet tr.total-row th,
+.sheet tr.group-row th {
+  position: static;
+}

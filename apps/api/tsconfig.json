@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [
+      "node"
+    ],
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "src",
+    "prisma",
+    "test",
+    "vitest.config.ts",
+    "tsup.config.ts"
+  ]
+}

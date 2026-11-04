@@ -1,0 +1,13 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Flat node_modules: avoids deep symlink trees, which OneDrive-synced folders handle badly.
+nodeLinker: hoisted
+
+# Packages allowed to run install scripts (pnpm blocks them by default).
+allowBuilds:
+  esbuild: true
+  prisma: true
+  "@prisma/client": true
+  "@prisma/engines": true

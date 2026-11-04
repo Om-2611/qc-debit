@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/tmp
+**/coverage
+.env
+.env.*
+!.env.example
+.git
+*.log
+Debit Note Format*.xlsx
+secrets
+ion-screenshots

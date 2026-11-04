@@ -1,0 +1,24 @@
+{
+  "name": "dalmia-qc",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Dalmia Polypro QC Debit Note management",
+  "packageManager": "pnpm@11.23.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter \"./apps/*\" dev",
+    "dev:api": "pnpm --filter @dalmia/api dev",
+    "dev:web": "pnpm --filter @dalmia/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:calc": "pnpm --filter @dalmia/calc test",
+    "typecheck": "pnpm -r typecheck",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @dalmia/api db:migrate",
+    "db:seed": "pnpm --filter @dalmia/api db:seed",
+    "db:reset": "pnpm --filter @dalmia/api db:reset"
+  }
+}
