@@ -37,9 +37,13 @@ const schema = z.object({
   gstin: z.string().trim().max(20),
   address: z.string().trim().max(500),
   isActive: z.boolean(),
+  ionSupplierCode: z.string().trim().max(50),
+  ionAddressCode: z.string().trim().max(50),
+  ionStateCode: z.string().trim().regex(/^(\d{2})?$/, 'Use the 2-digit GST state code, e.g. 27'),
+  gstRegistered: z.boolean(),
 });
 type FormValues = z.infer<typeof schema>;
-const BLANK: FormValues = { name: '', code: '', gstin: '', address: '', isActive: true };
+const BLANK: FormValues = { name: '', code: '', gstin: '', address: '', isActive: true, ionSupplierCode: '', ionAddressCode: '', ionStateCode: '', gstRegistered: true };
 
 /** Admin → Settings → Suppliers. Reports reference suppliers, so a supplier is deactivated, never deleted. */
 export function SuppliersPage() {
@@ -82,6 +86,7 @@ export function SuppliersPage() {
                 <TableCell>Name</TableCell>
                 <TableCell>Code</TableCell>
                 <TableCell>GSTIN</TableCell>
+                <TableCell>iON code</TableCell>
                 <TableCell>Address</TableCell>
                 <TableCell align="right">Reports</TableCell>
                 <TableCell>Status</TableCell>
@@ -95,6 +100,7 @@ export function SuppliersPage() {
                   <TableCell sx={{ fontWeight: 700 }}>{s.name}</TableCell>
                   <TableCell sx={{ fontFamily: 'var(--font-numeric)', fontSize: '0.8rem' }}>{s.code}</TableCell>
                   <TableCell sx={{ fontFamily: 'var(--font-numeric)', fontSize: '0.8rem' }}>{s.gstin}</TableCell>
+                  <TableCell sx={{ fontFamily: 'var(--font-numeric)', fontSize: '0.8rem' }}>{s.ionSupplierCode ?? <Chip size="small" label="missing" color="warning" variant="outlined" />}</TableCell>
                   <TableCell sx={{ maxWidth: 280 }}>{s.address}</TableCell>
                   <TableCell className="num">{s.reportCount}</TableCell>
                   <TableCell>
@@ -114,7 +120,7 @@ export function SuppliersPage() {
               ))}
               {data && rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} sx={{ py: 5, textAlign: 'center', color: 'text.secondary' }}>
+                  <TableCell colSpan={9} sx={{ py: 5, textAlign: 'center', color: 'text.secondary' }}>
                     {data.length === 0 ? 'No suppliers yet. Add the first one, or let the Gate type party names freely.' : 'No supplier matches the search.'}
                   </TableCell>
                 </TableRow>
@@ -138,7 +144,14 @@ function SupplierDialog({ supplier, onClose, onDone }: { supplier: AdminSupplier
   useEffect(() => {
     if (supplier === undefined) return;
     setError(null);
-    reset(supplier ? { name: supplier.name, code: supplier.code, gstin: supplier.gstin ?? '', address: supplier.address ?? '', isActive: supplier.isActive } : BLANK);
+    reset(supplier ? { name: supplier.name, code: supplier.code, gstin: supplier.gstin ?? '', address: supplier.address ?? '', isActive: supplier.isActive,
+            ionSupplierCode: supplier.ionSupplierCode ?? '',
+            ionAddressCode: supplier.ionAddressCode ?? '',
+            ionStateCode: supplier.ionStateCode ?? '',
+            gstRegistered: supplier.gstRegistered,
+          }
+        : BLANK,
+    );
   }, [supplier, reset]);
 
   const submit = handleSubmit(async (v) => {
@@ -173,6 +186,24 @@ function SupplierDialog({ supplier, onClose, onDone }: { supplier: AdminSupplier
               <TextField label="GSTIN" error={!!e.gstin} helperText={e.gstin?.message ?? 'Optional'} sx={{ flex: 1 }} {...register('gstin')} />
             </Stack>
             <TextField label="Address" multiline minRows={2} error={!!e.address} helperText={e.address?.message ?? 'Optional'} {...register('address')} />
+            <Typography className="section-label" sx={{ pt: 1 }}>
+              TCS iON (needed for “Load on TCS iON”)
+            </Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField label="iON supplier code" error={!!e.ionSupplierCode} helperText={e.ionSupplierCode?.message ?? 'e.g. CRRM_140290'} sx={{ flex: 1 }} {...register('ionSupplierCode')} />
+              <TextField label="GST state code" error={!!e.ionStateCode} helperText={e.ionStateCode?.message ?? 'From iON; blank = first 2 digits of GSTIN'} sx={{ flex: 1 }} {...register('ionStateCode')} />
+            </Stack>
+            <TextField label="iON address code" error={!!e.ionAddressCode} helperText={e.ionAddressCode?.message ?? 'Blank = the iON supplier code'} {...register('ionAddressCode')} />
+            <Controller
+              control={control}
+              name="gstRegistered"
+              render={({ field }) => (
+                <FormControlLabel
+                  control={<Switch checked={field.value} onChange={(_e, checked) => field.onChange(checked)} />}
+                  label={field.value ? 'GST-registered supplier' : 'Unregistered supplier (not supported by the iON push yet)'}
+                />
+              )}
+            />
             <Controller
               control={control}
               name="isActive"

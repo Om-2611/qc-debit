@@ -49,6 +49,9 @@ describe('admin endpoints are ADMIN only', () => {
     ['patch', '/api/admin/suppliers/x'],
     ['get', '/api/admin/materials'],
     ['patch', '/api/admin/materials/x'],
+    ['get', '/api/admin/plants'],
+    ['post', '/api/admin/plants'],
+    ['patch', '/api/admin/plants/x'],
     ['get', '/api/admin/parameters'],
     ['patch', '/api/admin/parameters/x'],
     ['put', '/api/admin/parameters/x/norms'],
@@ -135,6 +138,58 @@ describe('suppliers', () => {
   });
 });
 
+describe('suppliers: TCS iON mapping', () => {
+  it('stores the iON supplier code, state and registration flag, audits changes and keeps the iON code unique', async () => {
+    const created = await request(app)
+      .post('/api/admin/suppliers')
+      .set(admin.auth)
+      .send({ name: 'Ecoloom', code: 'ECO', gstin: '09AAAAA0000A1Z5', ionSupplierCode: 'CRRM_140290', ionStateCode: '09' });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({ ionSupplierCode: 'CRRM_140290', ionStateCode: '09', ionAddressCode: null, gstRegistered: true });
+
+    const clash = await request(app).post('/api/admin/suppliers').set(admin.auth).send({ name: 'Other', code: 'OTH', ionSupplierCode: 'crrm_140290' });
+    expect(clash.status).toBe(409);
+    expect((await request(app).post('/api/admin/suppliers').set(admin.auth).send({ name: 'Bad', code: 'BAD', ionStateCode: 'UP' })).status).toBe(400);
+
+    const patched = await request(app).patch(`/api/admin/suppliers/${created.body.id}`).set(admin.auth).send({ gstRegistered: false, ionStateCode: '' });
+    expect(patched.status).toBe(200);
+    expect(patched.body).toMatchObject({ gstRegistered: false, ionStateCode: null });
+    const audit = await prisma.auditLog.findFirst({ where: { action: 'SUPPLIER_UPDATE', field: 'ECO.gstRegistered' } });
+    expect(audit?.newValue).toBe('false');
+  });
+});
+
+describe('plants', () => {
+  it('lists the seeded DPNL plant and attaches it to new reports', async () => {
+    const list = await request(app).get('/api/admin/plants').set(admin.auth);
+    expect(list.status).toBe(200);
+    expect(list.body).toMatchObject([{ code: 'DPNL', ionSiteCode: 'DPNL', ionSiteAddressLabel: 'DPNL (Bill to Address)', stateCode: '27', isActive: true }]);
+
+    const report = await request(app).post('/api/reports').set(gate.auth).send({ reportDate: '2026-11-04' });
+    expect(report.status).toBe(201);
+    const row = await prisma.report.findUniqueOrThrow({ where: { id: report.body.id }, include: { plant: true } });
+    expect(row.plant?.code).toBe('DPNL');
+  });
+
+  it('creates, updates and audits plants; rejects duplicates and bad state codes; a second active plant stops the default', async () => {
+    const created = await request(app)
+      .post('/api/admin/plants')
+      .set(admin.auth)
+      .send({ code: 'dpvp', name: 'Dalmia Polypro VP', ionSiteCode: 'DPVP', ionSiteAddressLabel: 'DPVP (Bill to Address)', stateCode: '09' });
+    expect(created.status).toBe(201);
+    expect(created.body.code).toBe('DPVP');
+    expect((await request(app).post('/api/admin/plants').set(admin.auth).send({ code: 'DPVP', name: 'x', ionSiteCode: 'x', ionSiteAddressLabel: 'x', stateCode: '09' })).status).toBe(409);
+    expect((await request(app).patch(`/api/admin/plants/${created.body.id}`).set(admin.auth).send({ stateCode: 'MH' })).status).toBe(400);
+
+    const report = await request(app).post('/api/reports').set(gate.auth).send({ reportDate: '2026-11-04' });
+    expect((await prisma.report.findUniqueOrThrow({ where: { id: report.body.id } })).plantId).toBeNull();
+
+    const off = await request(app).patch(`/api/admin/plants/${created.body.id}`).set(admin.auth).send({ isActive: false });
+    expect(off.status).toBe(200);
+    expect((await prisma.auditLog.findFirst({ where: { action: 'PLANT_UPDATE', field: 'DPVP.isActive' } }))?.newValue).toBe('false');
+  });
+});
+
 describe('materials', () => {
   it('lists the five sheet columns in order', async () => {
     const res = await request(app).get('/api/admin/materials').set(admin.auth);
@@ -149,6 +204,8 @@ describe('materials', () => {
     expect(changeCode.status).toBe(400);
     expect(await prisma.material.findUnique({ where: { id: green.id } })).toMatchObject({ code: 'GREEN', name: 'Green' });
 
+    const ion = await request(app).patch(`/api/admin/materials/${green.id}`).set(admin.auth).send({ ionItemCode: 'RM-13025' });
+    expect(ion.body.ionItemCode).toBe('RM-13025');
     const renamed = await request(app).patch(`/api/admin/materials/${green.id}`).set(admin.auth).send({ name: 'Green PET', sortOrder: 25 });
     expect(renamed.status).toBe(200);
     expect(renamed.body).toMatchObject({ code: 'GREEN', name: 'Green PET', sortOrder: 25 });

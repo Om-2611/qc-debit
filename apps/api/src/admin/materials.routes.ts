@@ -7,7 +7,7 @@ import { conflict, notFound } from '../lib/errors';
 import { asyncHandler, parseBody } from '../lib/http';
 import { prisma } from '../prisma';
 
-const toDto = (m: Material): AdminMaterialDto => ({ id: m.id, code: m.code, name: m.name, sortOrder: m.sortOrder, isActive: m.isActive });
+const toDto = (m: Material): AdminMaterialDto => ({ id: m.id, code: m.code, name: m.name, sortOrder: m.sortOrder, isActive: m.isActive, ionItemCode: m.ionItemCode });
 
 /**
  * Mounted at /api/admin/materials behind requireAuth + requireAdmin.
@@ -40,7 +40,7 @@ materialsRouter.patch(
 
     const material = await prisma.material.update({ where: { id: existing.id }, data: input });
     await writeAudit(
-      (['name', 'sortOrder', 'isActive'] as const)
+      (['name', 'sortOrder', 'isActive', 'ionItemCode'] as const)
         .filter((f) => input[f] !== undefined && input[f] !== existing[f])
         .map((f) => ({
           userId: admin.id,

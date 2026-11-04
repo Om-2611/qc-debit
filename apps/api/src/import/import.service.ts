@@ -17,6 +17,7 @@ import type { z } from 'zod';
 import type { importCommitSchema } from '@dalmia/types';
 import { isMonsoon } from '../export/excel';
 import { writeAudit } from '../lib/audit';
+import { defaultPlantId } from '../lib/plant';
 import { HttpError, badRequest, conflict, notFound } from '../lib/errors';
 import { prisma } from '../prisma';
 import { loadMasters, nextReportNo } from '../reports/report.service';
@@ -403,6 +404,7 @@ async function importSheet(
       source: 'IMPORTED',
       reportDate: toDate(reportDate)!,
       supplierId,
+      plantId: await defaultPlantId(tx),
       partyNameRaw: state.header.partyNameRaw,
       poNumber: state.header.poNumber,
       truckNumber: state.header.truckNumber,

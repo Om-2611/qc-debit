@@ -103,6 +103,7 @@ async function seedSampleReport() {
     prisma.material.findMany(),
     prisma.parameter.findMany(),
   ]);
+  const plant = await prisma.plant.findUnique({ where: { code: 'DPNL' } });
   const materialIdByCode = new Map(materials.map((m) => [m.code, m.id]));
   const parameterIdByCode = new Map(parameters.map((p) => [p.code, p.id]));
 
@@ -119,6 +120,7 @@ async function seedSampleReport() {
       source: 'MANUAL',
       reportDate: new Date(SAMPLE_HEADER.reportDate),
       supplierId: supplier.id,
+      plantId: plant?.id ?? null,
       partyNameRaw: SAMPLE_HEADER.partyName,
       poNumber: SAMPLE_HEADER.poNumber,
       truckNumber: SAMPLE_HEADER.truckNumber,

@@ -14,12 +14,16 @@ const toDto = (s: Supplier, reportCount: number): AdminSupplierDto => ({
   gstin: s.gstin,
   address: s.address,
   isActive: s.isActive,
+  ionSupplierCode: s.ionSupplierCode,
+  ionAddressCode: s.ionAddressCode,
+  ionStateCode: s.ionStateCode,
+  gstRegistered: s.gstRegistered,
   createdAt: s.createdAt.toISOString(),
   reportCount,
 });
 
 /** Name and code are both unique; names compare case-insensitively so "ABC Traders" and "abc traders" cannot coexist. */
-async function assertUnique(input: { name?: string; code?: string }, exceptId?: string): Promise<void> {
+async function assertUnique(input: { name?: string; code?: string; ionSupplierCode?: string | null }, exceptId?: string): Promise<void> {
   const not = exceptId ? { id: { not: exceptId } } : {};
   if (input.name !== undefined) {
     const clash = await prisma.supplier.findFirst({ where: { name: { equals: input.name, mode: 'insensitive' }, ...not } });
@@ -28,6 +32,10 @@ async function assertUnique(input: { name?: string; code?: string }, exceptId?: 
   if (input.code !== undefined) {
     const clash = await prisma.supplier.findFirst({ where: { code: { equals: input.code, mode: 'insensitive' }, ...not } });
     if (clash) throw conflict(`Supplier code ${clash.code} is already used by "${clash.name}"`);
+  }
+  if (input.ionSupplierCode) {
+    const clash = await prisma.supplier.findFirst({ where: { ionSupplierCode: { equals: input.ionSupplierCode, mode: 'insensitive' }, ...not } });
+    if (clash) throw conflict(`iON supplier code ${clash.ionSupplierCode} is already used by "${clash.name}"`);
   }
 }
 
@@ -55,7 +63,17 @@ suppliersRouter.post(
     const input = parseBody(createSupplierSchema, req);
     await assertUnique(input);
     const supplier = await prisma.supplier.create({
-      data: { name: input.name, code: input.code, gstin: input.gstin ?? null, address: input.address ?? null, isActive: input.isActive ?? true },
+      data: {
+        name: input.name,
+        code: input.code,
+        gstin: input.gstin ?? null,
+        address: input.address ?? null,
+        isActive: input.isActive ?? true,
+        ionSupplierCode: input.ionSupplierCode ?? null,
+        ionAddressCode: input.ionAddressCode ?? null,
+        ionStateCode: input.ionStateCode ?? null,
+        gstRegistered: input.gstRegistered ?? true,
+      },
     });
     await writeAudit({ userId: admin.id, action: 'SUPPLIER_CREATE', field: supplier.code, newValue: supplier.name });
     res.status(201).json(toDto(supplier, 0));
@@ -73,7 +91,7 @@ suppliersRouter.patch(
 
     const supplier = await prisma.supplier.update({ where: { id: existing.id }, data: input });
     await writeAudit(
-      (['name', 'code', 'gstin', 'address', 'isActive'] as const)
+      (['name', 'code', 'gstin', 'address', 'isActive', 'ionSupplierCode', 'ionAddressCode', 'ionStateCode', 'gstRegistered'] as const)
         .filter((f) => input[f] !== undefined && input[f] !== existing[f])
         .map((f) => ({
           userId: admin.id,

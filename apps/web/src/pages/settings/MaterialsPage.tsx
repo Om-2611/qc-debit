@@ -36,6 +36,7 @@ export function MaterialsPage() {
                 <TableCell>Code (fixed)</TableCell>
                 <TableCell>Name</TableCell>
                 <TableCell align="right">Sort order</TableCell>
+                <TableCell>Default iON item code</TableCell>
                 <TableCell>Active</TableCell>
                 <TableCell />
               </TableRow>
@@ -57,18 +58,20 @@ function MaterialRow({ material, onFailure, onDone }: { material: AdminMaterialD
   const update = useUpdateMaterial();
   const [name, setName] = useState(material.name);
   const [sortOrder, setSortOrder] = useState(String(material.sortOrder));
+  const [ionItemCode, setIonItemCode] = useState(material.ionItemCode ?? '');
 
   // Adopt the server copy after a save or refetch.
   useEffect(() => {
     setName(material.name);
     setSortOrder(String(material.sortOrder));
+    setIonItemCode(material.ionItemCode ?? '');
   }, [material]);
 
   const order = Number(sortOrder);
   const valid = name.trim().length > 0 && sortOrder.trim() !== '' && Number.isInteger(order) && order >= 0;
-  const dirty = name.trim() !== material.name || order !== material.sortOrder;
+  const dirty = name.trim() !== material.name || order !== material.sortOrder || ionItemCode.trim() !== (material.ionItemCode ?? '');
 
-  const save = async (body: { name?: string; sortOrder?: number; isActive?: boolean }, done: string) => {
+  const save = async (body: { name?: string; sortOrder?: number; isActive?: boolean; ionItemCode?: string }, done: string) => {
     onFailure(null);
     try {
       await update.mutateAsync({ id: material.id, body });
@@ -95,6 +98,17 @@ function MaterialRow({ material, onFailure, onDone }: { material: AdminMaterialD
         />
       </TableCell>
       <TableCell>
+        <input
+          className="cell-input text"
+          style={{ width: 140 }}
+          placeholder="e.g. RM-13001"
+          aria-label={`Default iON item code of ${material.code}`}
+          value={ionItemCode}
+          maxLength={50}
+          onChange={(e) => setIonItemCode(e.target.value)}
+        />
+      </TableCell>
+      <TableCell>
         <Switch
           size="small"
           checked={material.isActive}
@@ -104,7 +118,7 @@ function MaterialRow({ material, onFailure, onDone }: { material: AdminMaterialD
         />
       </TableCell>
       <TableCell align="right">
-        <Button size="small" variant="outlined" disabled={!dirty || !valid || update.isPending} onClick={() => void save({ name: name.trim(), sortOrder: order }, `${name.trim()} saved`)}>
+        <Button size="small" variant="outlined" disabled={!dirty || !valid || update.isPending} onClick={() => void save({ name: name.trim(), sortOrder: order, ionItemCode: ionItemCode.trim() }, `${name.trim()} saved`)}>
           Save
         </Button>
       </TableCell>

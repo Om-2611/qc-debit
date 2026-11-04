@@ -13,6 +13,7 @@ import {
 } from '@dalmia/types';
 import { SETTING_KEYS, loadEngineConfig } from '../config/engine-config';
 import { writeAudit, type AuditEntry } from '../lib/audit';
+import { defaultPlantId } from '../lib/plant';
 import { notifyHandoff, sendPending, type PendingPush } from '../notifications/notification.service';
 import { HttpError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { prisma } from '../prisma';
@@ -201,6 +202,7 @@ export async function createReport(user: AuthUser, header: HeaderValues): Promis
             reportNo: await nextReportNo(tx, header.reportDate),
             reportDate: toDate(header.reportDate)!,
             createdById: user.id,
+            plantId: await defaultPlantId(tx),
             weightTolerancePercent: tolerance && Number.isFinite(Number(tolerance.value)) ? Number(tolerance.value) : null,
           },
           include: reportInclude,

@@ -113,19 +113,48 @@ model Supplier {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
+  /// TCS iON supplier code (e.g. CRRM_140290). Required before a debit note can be loaded on iON.
+  ionSupplierCode String?
+  /// iON "Party Address Code" prefix; blank = the supplier code itself.
+  ionAddressCode  String?
+  /// 2-digit GST state code from iON's supplier master (27 = Maharashtra, 09 = Uttar Pradesh). Wins over the GSTIN prefix.
+  ionStateCode    String?
+  /// false = unregistered supplier (CDNUR); the iON push does not support these yet.
+  gstRegistered   Boolean @default(true)
+
   reports Report[]
 }
 
 model Material {
-  id        String  @id @default(cuid())
+  id          String  @id @default(cuid())
   /// Stable key used by the calculation engine (CLEAR, GREEN, BARWASTE, BARWASTE_WITH_RING, OTHERS).
-  code      String  @unique
-  name      String  @unique
-  sortOrder Int
-  isActive  Boolean @default(true)
+  code        String  @unique
+  name        String  @unique
+  sortOrder   Int
+  isActive    Boolean @default(true)
+  /// Default TCS iON item code for the debit-note line (e.g. RM-13001 for Clear). The PO decides the real one, so a report can override it.
+  ionItemCode String?
 
   reportLines   ReportMaterialLine[]
   shortageLines ShortageLine[]
+}
+
+/// A Dalmia plant = one TCS iON "Transaction Organization" (site).
+model Plant {
+  id                  String   @id @default(cuid())
+  /// Short code shown in the app, e.g. DPNL.
+  code                String   @unique
+  name                String
+  /// Site code iON lists in the Transaction Organization drop-down (option text starts with it).
+  ionSiteCode         String
+  /// Label of the Site Address Code option, e.g. "DPNL (Bill to Address)".
+  ionSiteAddressLabel String
+  /// 2-digit GST state code of the plant (27 = Maharashtra). Decides IGST vs CGST+SGST.
+  stateCode           String
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  reports Report[]
 }
 
 model Parameter {
@@ -190,6 +219,8 @@ model Report {
   reportDate    DateTime  @db.Date
   supplierId    String?
   supplier      Supplier? @relation(fields: [supplierId], references: [id])
+  plantId       String?
+  plant         Plant?    @relation(fields: [plantId], references: [id])
   /// Party name exactly as typed / as found in the imported sheet.
   partyNameRaw  String?
   poNumber      String?
@@ -244,6 +275,7 @@ model Report {
 
   @@index([status])
   @@index([supplierId])
+  @@index([plantId])
   @@index([reportDate])
   @@index([grnNumber])
   @@index([truckNumber, invoiceNumber])

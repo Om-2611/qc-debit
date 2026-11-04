@@ -4,6 +4,7 @@ import express from 'express';
 import helmet from 'helmet';
 import { materialsRouter } from './admin/materials.routes';
 import { parametersRouter } from './admin/parameters.routes';
+import { plantsRouter } from './admin/plants.routes';
 import { settingsRouter } from './admin/settings.routes';
 import { suppliersRouter } from './admin/suppliers.routes';
 import { usersRouter } from './admin/users.routes';
@@ -46,6 +47,7 @@ export function createApp(): express.Express {
   app.use('/api/admin/users', usersRouter);
   app.use('/api/admin/suppliers', suppliersRouter);
   app.use('/api/admin/materials', materialsRouter);
+  app.use('/api/admin/plants', plantsRouter);
   app.use('/api/admin/parameters', parametersRouter);
   app.use('/api/admin/settings', settingsRouter);
   app.use('/api/admin/import', importRouter);

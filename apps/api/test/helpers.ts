@@ -20,6 +20,7 @@ export async function resetDatabase(): Promise<void> {
   await prisma.parameter.deleteMany();
   await prisma.material.deleteMany();
   await prisma.supplier.deleteMany();
+  await prisma.plant.deleteMany();
   await prisma.setting.deleteMany();
 }
 
@@ -31,6 +32,8 @@ export async function seedUsers(): Promise<void> {
 }
 
 export async function seedEngineConfig(): Promise<void> {
+  // Mirrors the plant the ion_masters migration inserts.
+  await prisma.plant.create({ data: { code: 'DPNL', name: 'Dalmia Polypro (DPNL)', ionSiteCode: 'DPNL', ionSiteAddressLabel: 'DPNL (Bill to Address)', stateCode: '27' } });
   const effectiveFrom = new Date('2000-01-01');
   await prisma.material.createMany({ data: DEFAULT_MATERIALS });
   for (const p of DEFAULT_PARAMETERS) {

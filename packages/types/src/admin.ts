@@ -21,11 +21,20 @@ const supplierFields = {
   gstin: optionalText(20),
   address: optionalText(500),
   isActive: z.boolean(),
+  ionSupplierCode: optionalText(50),
+  ionAddressCode: optionalText(50),
+  ionStateCode: z
+    .string()
+    .trim()
+    .regex(/^\d{2}$/, 'Use the 2-digit GST state code, e.g. 27')
+    .or(z.literal('').transform(() => null))
+    .nullable(),
+  gstRegistered: z.boolean(),
 };
 
 export const createSupplierSchema = z
   .object(supplierFields)
-  .partial({ gstin: true, address: true, isActive: true })
+  .partial({ gstin: true, address: true, isActive: true, ionSupplierCode: true, ionAddressCode: true, ionStateCode: true, gstRegistered: true })
   .strict();
 export type CreateSupplierInput = z.input<typeof createSupplierSchema>;
 
@@ -39,6 +48,10 @@ export interface AdminSupplierDto {
   gstin: string | null;
   address: string | null;
   isActive: boolean;
+  ionSupplierCode: string | null;
+  ionAddressCode: string | null;
+  ionStateCode: string | null;
+  gstRegistered: boolean;
   createdAt: string;
   /** Reports that reference the supplier — the reason suppliers are deactivated rather than deleted. */
   reportCount: number;
@@ -52,6 +65,7 @@ export const updateMaterialSchema = z
     name: z.string().trim().min(1, 'Name is required').max(100),
     sortOrder: z.number().int().min(0).max(10_000),
     isActive: z.boolean(),
+    ionItemCode: optionalText(50),
   })
   .partial()
   .strict()
@@ -64,6 +78,34 @@ export interface AdminMaterialDto {
   name: string;
   sortOrder: number;
   isActive: boolean;
+  ionItemCode: string | null;
+}
+
+// ---------------------------------------------------------------- plants
+
+const gstStateCode = z.string().trim().regex(/^\d{2}$/, 'Use the 2-digit GST state code, e.g. 27');
+const plantFields = {
+  code: z.string().trim().toUpperCase().min(1, 'Code is required').max(20),
+  name: z.string().trim().min(1, 'Name is required').max(200),
+  ionSiteCode: z.string().trim().min(1, 'iON site code is required').max(30),
+  ionSiteAddressLabel: z.string().trim().min(1, 'Site address label is required').max(100),
+  stateCode: gstStateCode,
+  isActive: z.boolean(),
+};
+export const createPlantSchema = z.object(plantFields).partial({ isActive: true }).strict();
+export type CreatePlantInput = z.input<typeof createPlantSchema>;
+export const updatePlantSchema = z.object(plantFields).partial().strict().refine(nothingToUpdate, 'Nothing to update');
+export type UpdatePlantInput = z.input<typeof updatePlantSchema>;
+
+export interface AdminPlantDto {
+  id: string;
+  code: string;
+  name: string;
+  ionSiteCode: string;
+  ionSiteAddressLabel: string;
+  stateCode: string;
+  isActive: boolean;
+  reportCount: number;
 }
 
 // ---------------------------------------------------------------- parameters, norms, rates
