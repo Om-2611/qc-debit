@@ -22,6 +22,20 @@ export function expectedTaxes(amount: MoneyLike, interState: boolean, config: Io
   }));
 }
 
+const sameStateText = (a: string, b: string): boolean => a.replace(/\s+/g, ' ').trim().toLowerCase() === b.replace(/\s+/g, ' ').trim().toLowerCase();
+
+/**
+ * Step B5: iON shows "Site Address (State)" and "Party Address (State)". Same state = CGST+SGST, different = IGST.
+ * The two texts are only compared with each other, never with a name table. Returns the problem, or null when the
+ * screen agrees with the tax type the payload expects.
+ */
+export function checkScreenStates(siteState: string, partyState: string, payloadInterState: boolean): string | null {
+  if (!siteState.trim() || !partyState.trim()) return `iON shows no state for the ${siteState.trim() ? 'party' : 'site'} address`;
+  const screenInterState = !sameStateText(siteState, partyState);
+  if (screenInterState === payloadInterState) return null;
+  return `iON shows site state "${siteState.trim()}" and party state "${partyState.trim()}" (${screenInterState ? 'IGST' : 'CGST+SGST'}), but the debit note was prepared for ${payloadInterState ? 'IGST' : 'CGST+SGST'}`;
+}
+
 export interface ActualTax {
   code: string;
   amount: string | number;

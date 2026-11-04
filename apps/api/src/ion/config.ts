@@ -31,11 +31,13 @@ export interface IonConfig {
   reasonDetailsMaxLength: number;
   /** Largest accepted difference between iON's tax line and ours, per line, in rupees (rounding). */
   taxToleranceRupees: number;
-  /** e.g. DPNL/GRN_RM/2627/4331 */
+  /** Checked after normalising (trim, upper case, no spaces). <site>/GRN_<type>/<financial year>/<number>, e.g. DPNL/GRN_RM/2627/4331 where 2627 = FY 2026-27. */
   grnPattern: RegExp;
-  /** Short names our team writes in Reason Details; a parameter not listed falls back to its own name. UNCONFIRMED wording. */
+  /**
+   * Every short label our team writes in Reason Details, for the accounts team to review: one entry per parameter code,
+   * plus SHORTAGE for all shortage lines together. A parameter not listed falls back to its own name. UNCONFIRMED wording.
+   */
   reasonLabels: Record<string, string>;
-  shortageLabel: string;
 }
 
 export const ION_CONFIG: IonConfig = {
@@ -65,6 +67,6 @@ export const ION_CONFIG: IonConfig = {
     COLOUR_BOTTLE_PET: 'Colour',
     NON_PET: 'Non-PET',
     ALUMINIUM_PET: 'Aluminium',
+    SHORTAGE: 'Shortage',
   },
-  shortageLabel: 'Shortage',
 };

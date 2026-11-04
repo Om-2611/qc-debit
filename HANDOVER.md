@@ -39,6 +39,19 @@ Manual Excel cross-check: `scripts/verify-excel-export.ps1` (needs Microsoft Exc
    step, that is a workflow change to discuss.
 7. **Business-rule table in the README.** The app follows the client workbook; the "sheet defects not copied" list
    should be shown to the Purchase Manager once so nobody is surprised by the small differences (e.g. the "Other" row's quantity).
+8. **Shortage of Green is charged at the Clear rate** (found 2026-11-04 while building the TCS iON push; the app copies
+   the workbook, so the calculation is unchanged and this needs the Purchase Manager's decision). The "Weight Short" row
+   charges the truck's whole shortfall at the Clear rate, whichever material was short, and the Green row only handles
+   *excess* Green. Worked example (engine run, no tolerance): Clear invoiced 10,000 kg = received 10,000 kg at Rs 30;
+   Green invoiced 5,000 kg, received 4,000 kg at Rs 20. Green is 1,000 kg short, worth Rs 20,000 at the Green rate, but
+   the debit comes out at **Rs 30,000** (1,000 x 30). The iON pre-flight check "debit must not exceed the invoice's
+   taxable value" does not catch this: it only fires when the debit is above the whole invoice.
+9. **Shortage of "Others" (and "Barwaste With Ring") may be charged twice.** Same cause: the Clear row already charges every
+   short kilo at the Clear rate, and the Others row then charges its own shortage again at its own rate. Worked example:
+   Clear 10,000 kg in and out at Rs 30; Others invoiced 1,000 kg, received 900 kg at Rs 10. The 100 kg short is charged
+   Rs 3,000 in the Clear row (100 x 30) **and** Rs 1,000 in the Others row (100 x 10): a debit of **Rs 4,000** for a
+   100 kg shortage. (Barwaste is not affected: its row only adds the rate difference, giving 100 x 25 = Rs 2,500.) It may be
+   how the client's workbook was meant to work; ask the Purchase Manager before changing anything.
 
 ## 3. Deploying
 

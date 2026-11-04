@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { ION_CONFIG, type IonConfig } from './config';
 import { isoToIon, roundMoney, type MoneyLike } from './money';
-import { buildNarration, buildReasonDetails, pickMainMaterial, reasonList, type DeductionForReason } from './payload';
+import { buildNarration, buildReasonDetails, normalizeGrn, pickMainMaterial, reasonList, type DeductionForReason } from './payload';
 import { GST_STATES, resolveSupplierState } from './states';
 import { expectedTaxes, taxCodesFor, type ExpectedTax } from './tax';
 
@@ -69,8 +69,8 @@ export interface IonPayload {
   itemCodeSource: 'override' | 'material';
   /** 2-decimal rupees, taxable value before GST. */
   amount: string;
+  /** Used only to decide IGST vs CGST+SGST in pre-flight; the worker re-derives it from the two states shown on the iON screen. */
   supplierStateCode: string;
-  supplierStateName: string;
   interState: boolean;
   expectedTaxes: ExpectedTax[];
   reason: string;
@@ -122,7 +122,7 @@ export function runPreflight(input: PreflightInput, config: IonConfig = ION_CONF
   if (!hasText(report.invoiceDate)) block('INVOICE_DATE_MISSING', 'The invoice date is missing.');
   else if (report.invoiceDate > input.todayIso) block('INVOICE_DATE_FUTURE', `The invoice date ${isoToIon(report.invoiceDate)} is in the future.`);
   if (!hasText(report.grnNumber)) block('GRN_MISSING', 'The GRN number is missing.');
-  else if (!config.grnPattern.test(report.grnNumber.trim())) {
+  else if (!config.grnPattern.test(normalizeGrn(report.grnNumber))) {
     block('GRN_FORMAT', `GRN "${report.grnNumber}" does not look like an iON GRN number (e.g. DPNL/GRN_RM/2627/4331).`);
   }
 
@@ -191,19 +191,18 @@ export function runPreflight(input: PreflightInput, config: IonConfig = ION_CONF
     partyAddressLabel: `${addressCode} (Bill to Address)`,
     supplierInvoiceNo: report.invoiceNumber!.trim(),
     supplierInvoiceDate: isoToIon(report.invoiceDate!),
-    grnNo: report.grnNumber!.trim(),
+    grnNo: normalizeGrn(report.grnNumber!),
     itemCode,
     itemCodeSource,
     amount: amount.toFixed(2),
     supplierStateCode,
-    supplierStateName: GST_STATES[supplierStateCode]!,
     interState,
     expectedTaxes: expectedTaxes(amount, interState, config),
     reason: config.reason,
     reasonDetails,
     gstTransactionType: config.gstTransactionType,
     supplierDrCrNo: config.supplierDrCrNo,
-    narration: buildNarration({ qcNo: report.reportNo, invoiceNo: report.invoiceNumber!, grnNo: report.grnNumber!, truckNo: report.truckNumber }),
+    narration: buildNarration({ qcNo: report.reportNo, invoiceNo: report.invoiceNumber!, grnNo: normalizeGrn(report.grnNumber!), truckNo: report.truckNumber }),
   };
   return { ok: true, issues, payload };
 }

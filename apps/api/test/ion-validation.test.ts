@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ION_CONFIG } from '../src/ion/config';
 import { isoToIon, roundMoney, todayIst } from '../src/ion/money';
-import { buildNarration, buildReasonDetails, pickMainMaterial, toPlainLine } from '../src/ion/payload';
+import { buildNarration, buildReasonDetails, normalizeGrn, pickMainMaterial, toPlainLine } from '../src/ion/payload';
 import { invoiceTaxableValue, runPreflight, type PreflightInput } from '../src/ion/preflight';
-import { resolveSupplierState } from '../src/ion/states';
-import { compareTaxes, expectedTaxes } from '../src/ion/tax';
+import { GST_STATES, resolveSupplierState } from '../src/ion/states';
+import { checkScreenStates, compareTaxes, expectedTaxes } from '../src/ion/tax';
 
 const DED = (parameterCode: string, name: string, sortOrder: number, approvedAmount: number | string) => ({ parameterCode, name, sortOrder, approvedAmount });
 
@@ -111,6 +111,26 @@ describe('supplier state', () => {
   });
 });
 
+describe('screen states at step B5', () => {
+  it('accepts a screen that agrees with the payload and compares the two texts only with each other', () => {
+    expect(checkScreenStates('Maharashtra', 'Uttar Pradesh', true)).toBeNull();
+    expect(checkScreenStates(' maharashtra ', 'MAHARASHTRA', false)).toBeNull();
+    expect(checkScreenStates('Maharashtra', 'Maharashtra', true)).toContain('CGST+SGST');
+    expect(checkScreenStates('Maharashtra', 'Uttar Pradesh', false)).toContain('IGST');
+    expect(checkScreenStates('Maharashtra', '', true)).toContain('party');
+  });
+});
+
+describe('state-code table', () => {
+  it('matches the list agreed with the client', () => {
+    expect(Object.keys(GST_STATES)).toHaveLength(39);
+    expect(GST_STATES['25']).toBe('Daman and Diu (legacy)');
+    expect(GST_STATES['28']).toBe('Andhra Pradesh (old)');
+    expect(GST_STATES['97']).toBe('Other Territory');
+    expect(GST_STATES['27']).toBe('Maharashtra');
+  });
+});
+
 describe('reason details', () => {
   it('lists the non-zero deductions in report order, with our team\'s short names', () => {
     expect(buildReasonDetails({ deductions: GOLDEN_DEDUCTIONS, shortageAmounts: [], qcNo: 'QC/26-27/0013' })).toBe('Moisture, Iron, Raffia, Colour, Non-PET');
@@ -162,6 +182,10 @@ describe('narration', () => {
     );
   });
 
+  it('normalises the GRN: trimmed, upper case, no spaces', () => {
+    expect(normalizeGrn(' dpnl/grn_rm/2627/ 4331 ')).toBe('DPNL/GRN_RM/2627/4331');
+  });
+
   it('drops the truck when there is none, and is plain ASCII on one line', () => {
     expect(buildNarration({ qcNo: 'Q', invoiceNo: 'I', grnNo: 'G', truckNo: '  ' })).toBe('QC deduction as per Q, Inv I, GRN G');
     expect(toPlainLine('Debit ₹1,000\n  for  café')).toBe('Debit Rs1,000 for cafe');
@@ -201,7 +225,6 @@ describe('pre-flight', () => {
       itemCodeSource: 'material',
       amount: '1000.00',
       supplierStateCode: '09',
-      supplierStateName: 'Uttar Pradesh',
       interState: true,
       expectedTaxes: [{ code: 'INPUT-IGST 18%', amount: '180.00' }],
       reason: 'Others',
@@ -256,6 +279,10 @@ describe('pre-flight', () => {
       expect(codes(runPreflight(golden({ report: { ...golden().report, grnNumber: grn } }))), grn).toContain('GRN_FORMAT');
     }
     expect(codes(runPreflight(golden({ report: { ...golden().report, grnNumber: 'DPVP/GRN_RM/2627/12' } })))).not.toContain('GRN_FORMAT');
+    // normalised before validating, and the payload carries the normalised GRN
+    const sloppy = runPreflight(golden({ report: { ...golden().report, grnNumber: ' dpnl/grn_rm/2627/4331 ' } }));
+    expect(sloppy.ok).toBe(true);
+    expect(sloppy.payload?.grnNo).toBe('DPNL/GRN_RM/2627/4331');
   });
 
   it('blocks when an iON push already exists, whatever its status', () => {

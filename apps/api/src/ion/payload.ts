@@ -20,7 +20,7 @@ export function reasonList(
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .filter((d) => isNonZero(d.approvedAmount))
     .map((d) => config.reasonLabels[d.parameterCode] ?? d.name);
-  if (input.shortageAmounts.some(isNonZero)) names.push(config.shortageLabel);
+  if (input.shortageAmounts.some(isNonZero)) names.push(config.reasonLabels.SHORTAGE ?? 'Shortage');
   return names.join(', ');
 }
 
@@ -39,6 +39,11 @@ export function buildReasonDetails(
   if (withQc.length <= max) return withQc;
   // A hard cut at the limit, without leaving a dangling separator.
   return list.slice(0, max).replace(/[,\s]+$/, '');
+}
+
+/** The GRN as iON wants it: trimmed, upper case, no spaces (so " dpnl/grn_rm/2627/4331 " matches). */
+export function normalizeGrn(grn: string): string {
+  return grn.replace(/\s+/g, '').toUpperCase();
 }
 
 /** Plain text, one line, ASCII only ("Rs", never the rupee sign), as iON's Remarks field wants it. */
