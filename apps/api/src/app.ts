@@ -12,6 +12,7 @@ import { authRouter, meRouter } from './auth/auth.routes';
 import { requireAdmin, requireAuth } from './auth/middleware';
 import { dashboardRouter } from './dashboard/dashboard.routes';
 import { env } from './env';
+import { ionRouter } from './ion/ion.routes';
 import { importRouter } from './import/import.routes';
 import { errorHandler, notFoundHandler } from './lib/errors';
 import { lookupsRouter } from './lookups.routes';
@@ -51,6 +52,7 @@ export function createApp(): express.Express {
   app.use('/api/admin/parameters', parametersRouter);
   app.use('/api/admin/settings', settingsRouter);
   app.use('/api/admin/import', importRouter);
+  app.use('/api/ion', requireAdmin, ionRouter);
   app.use('/api/dashboard', dashboardRouter);
 
   serveWebApp(app, env.WEB_DIST);
