@@ -540,10 +540,22 @@ export async function undoBatch(user: AuthUser, batchId: string): Promise<{ batc
     if (Date.now() > undoDeadline(batch.uploadedAt).getTime()) {
       throw badRequest(`An import can only be undone within ${IMPORT_UNDO_WINDOW_HOURS} hours of the upload.`);
     }
+    // A report that has a live debit note in iON must not disappear from under it.
+    const loaded = await tx.ionPush.findMany({
+      where: { report: { importBatchId: batchId }, resetAt: null, runMode: { not: 'DRY_RUN' } },
+      select: { ionDnNo: true, status: true, report: { select: { reportNo: true } } },
+      orderBy: { report: { reportNo: 'asc' } },
+    });
+    if (loaded.length > 0) {
+      const list = loaded.map((p) => `${p.report.reportNo} (${p.ionDnNo ? `iON ${p.ionDnNo}` : `iON push ${p.status.toLowerCase().replace(/_/g, ' ')}, no DN number`})`).join(', ');
+      throw conflict(`This import cannot be undone: ${loaded.length === 1 ? 'a report has' : 'these reports have'} been loaded on TCS iON: ${list}. Reset the iON push of each first (and cancel the debit note in iON).`);
+    }
     // Guard on undoneAt, so two simultaneous undos cannot both succeed.
     const marked = await tx.importBatch.updateMany({ where: { id: batchId, undoneAt: null }, data: { undoneAt: new Date() } });
     if (marked.count !== 1) throw conflict('This import has already been undone.');
     const reports = await tx.report.findMany({ where: { importBatchId: batchId }, select: { reportNo: true } });
+    // Reset and dry-run pushes saved nothing live; they only reference the reports, so they go with them.
+    await tx.ionPush.deleteMany({ where: { report: { importBatchId: batchId } } });
     const deleted = await tx.report.deleteMany({ where: { importBatchId: batchId } });
     await writeAudit({ userId: user.id, action: 'IMPORT_UNDO', field: batch.fileName, oldValue: reports.map((r) => r.reportNo), newValue: { batchId, deletedReports: deleted.count } }, tx);
     return { batchId, deletedReports: deleted.count };

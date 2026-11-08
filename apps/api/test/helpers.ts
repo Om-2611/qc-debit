@@ -8,6 +8,12 @@ import { prisma } from '../src/prisma';
 export const PASSWORD = 'Test@12345';
 const passwordHash = bcrypt.hashSync(PASSWORD, 4); // low cost: tests only
 
+/** A minimal valid JPEG header (start of frame carries the size); enough for the server's checks. */
+export function fakeJpeg(width = 1280, height = 720, padding = 0): Buffer {
+  const sof = Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, height >> 8, height & 0xff, width >> 8, width & 0xff, 0x01, 0x01, 0x11, 0x00, 0x02, 0x11, 0x00, 0x03, 0x11, 0x00]);
+  return Buffer.concat([Buffer.from([0xff, 0xd8]), sof, Buffer.alloc(padding), Buffer.from([0xff, 0xd9])]);
+}
+
 export const emailFor = (role: Role): string => `${role.toLowerCase()}@test.local`;
 
 export async function resetDatabase(): Promise<void> {

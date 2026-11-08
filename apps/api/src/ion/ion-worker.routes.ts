@@ -92,10 +92,10 @@ ionWorkerRouter.post(
 
 ionWorkerRouter.post(
   '/pushes/:id/screenshots',
-  express.raw({ type: ['image/png', 'image/jpeg'], limit: '4mb' }),
+  express.raw({ type: ['image/jpeg', 'image/png'], limit: '2mb' }),
   asyncHandler(async (req, res) => {
     const q = parseQuery(z.object({ workerId, label: z.string().trim().min(1).max(100) }), req);
-    if (!Buffer.isBuffer(req.body)) throw new HttpError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Send the screenshot as image/png or image/jpeg.');
+    if (!Buffer.isBuffer(req.body)) throw new HttpError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Send the screenshot as image/jpeg.');
     const id = await saveScreenshot(req.params.id!, q.workerId, q.label, req.headers['content-type']!.split(';')[0]!, req.body);
     res.status(201).json({ id });
   }),

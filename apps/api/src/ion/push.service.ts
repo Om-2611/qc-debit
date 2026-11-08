@@ -7,6 +7,7 @@ import { sendPush, type PushPayload } from '../notifications/push';
 import { prisma } from '../prisma';
 import { ION_CONFIG } from './config';
 import { preflightReport } from './load';
+import { SCREENSHOT_SPEC, cleanupScreenshotsSometimes, screenshotProblem } from './screenshots';
 import { isoToIon, todayIst } from './money';
 import type { IonPayload } from './preflight';
 import * as machine from './state-machine';
@@ -16,7 +17,6 @@ type Tx = Prisma.TransactionClient;
 
 /** Serialises "pick the next job" so two workers (or a worker and the recovery sweep) can never both start one. */
 const CLAIM_LOCK_KEY = 710201;
-const MAX_SCREENSHOT_BYTES = 3 * 1024 * 1024;
 
 const RUN_MODES = { dry_run: 'DRY_RUN', draft_only: 'DRAFT_ONLY', full: 'FULL' } as const;
 export type RunModeInput = keyof typeof RUN_MODES;
@@ -73,6 +73,14 @@ function assertOwner(row: IonPush, workerId: string): void {
   if (row.lockedBy !== workerId) throw conflict('This job is no longer held by this worker.');
 }
 
+/** The worker has no user account, so its audit rows sit under the person who requested the job; the action and the value say it was the worker, not them. */
+const workerAudit = (row: IonPush, action: string, value: unknown) => ({
+  userId: row.requestedById,
+  reportId: row.reportId,
+  action: `ION_WORKER_${action}`,
+  newValue: `${value ?? ''} (by iON worker)`.trim(),
+});
+
 const clip = (text: string | null | undefined, max = 2000): string | null => (text ? text.slice(0, max) : null);
 
 async function logStep(tx: Tx, pushId: string, step: string, outcome: 'ok' | 'error' | 'info', message: string | null, screenshotId: string | null = null): Promise<void> {
@@ -115,7 +123,7 @@ async function recoverStaleIn(tx: Tx, pending: PendingAdminPush[]): Promise<void
     });
     await logStep(tx, id, 'worker-lost', 'error', `No heartbeat from ${row.lockedBy}. Job is now ${next.status}.`);
     if (next.status === 'CHECK_MANUALLY') {
-      await writeAudit({ userId: row.requestedById, reportId: row.reportId, action: 'ION_CHECK_MANUALLY', newValue: 'worker lost' }, tx);
+      await writeAudit(workerAudit(row, 'CHECK_MANUALLY', 'worker lost'), tx);
       const report = await tx.report.findUniqueOrThrow({ where: { id: row.reportId }, select: { reportNo: true } });
       const p = await notifyAdmins(tx, row.reportId, `${report.reportNo}: check iON manually`, 'The iON worker stopped while loading this debit note. Look in iON before doing anything else.');
       if (p) pending.push(p);
@@ -357,11 +365,14 @@ export interface WorkerJob {
     taxToleranceRupees: number;
     voucherType: string;
     voucherSubType: string;
+    /** Every screenshot must be a JPEG of this quality and at most this wide (set the browser viewport to maxWidth). */
+    screenshot: { type: 'jpeg'; quality: number; maxWidth: number };
   };
 }
 
 export async function claimNext(workerId: string, environment: 'training' | 'live'): Promise<WorkerJob | null> {
   if (!env.ION_PUSH_ENABLED) return null;
+  cleanupScreenshotsSometimes();
   const pending: PendingAdminPush[] = [];
   const job = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${CLAIM_LOCK_KEY})`;
@@ -400,6 +411,7 @@ export async function claimNext(workerId: string, environment: 'training' | 'liv
       taxToleranceRupees: ION_CONFIG.taxToleranceRupees,
       voucherType: ION_CONFIG.voucherType,
       voucherSubType: ION_CONFIG.voucherSubType,
+      screenshot: { type: 'jpeg', quality: SCREENSHOT_SPEC.quality, maxWidth: SCREENSHOT_SPEC.maxWidth },
     },
   };
 }
@@ -435,8 +447,8 @@ export async function recordStep(id: string, workerId: string, input: StepInput)
 }
 
 export async function saveScreenshot(id: string, workerId: string, label: string, mime: string, data: Buffer): Promise<string> {
-  if (data.length === 0) throw conflict('Empty screenshot.');
-  if (data.length > MAX_SCREENSHOT_BYTES) throw conflict(`Screenshot is larger than ${MAX_SCREENSHOT_BYTES / 1024 / 1024} MB.`);
+  const problem = screenshotProblem(mime, data);
+  if (problem) throw conflict(problem);
   return withOwnedJob(id, workerId, async (tx, row) => {
     const shot = await tx.ionScreenshot.create({ data: { pushId: row.id, label: label.slice(0, 100), mime, data: new Uint8Array(data) } });
     await tx.ionPush.update({ where: { id: row.id }, data: { heartbeatAt: new Date() } });
@@ -478,7 +490,7 @@ export async function recordMilestone(id: string, workerId: string, input: Miles
     const label = input.name === 'checkpoint' ? `checkpoint ${input.checkpoint}` : input.name.replace('_', ' ');
     await logStep(tx, row.id, `milestone: ${label}`, 'ok', input.dnNo ?? null);
     if (input.name === 'draft_created' || input.name === 'submitted') {
-      await writeAudit({ userId: row.requestedById, reportId: row.reportId, action: input.name === 'draft_created' ? 'ION_DRAFT_CREATED' : 'ION_SUBMITTED', newValue: next.ionDnNo }, tx);
+      await writeAudit(workerAudit(row, input.name === 'draft_created' ? 'DRAFT_CREATED' : 'SUBMITTED', next.ionDnNo), tx);
     }
   });
 }
@@ -514,7 +526,7 @@ export async function finishJob(id: string, workerId: string, input: FinishInput
     const report = await tx.report.findUniqueOrThrow({ where: { id: row.reportId }, select: { reportNo: true } });
     if (input.outcome === 'failed') {
       if (next.status === 'FAILED' || next.status === 'FAILED_RETRYABLE' || next.status === 'CHECK_MANUALLY') {
-        await writeAudit({ userId: row.requestedById, reportId: row.reportId, action: next.status === 'CHECK_MANUALLY' ? 'ION_CHECK_MANUALLY' : 'ION_PUSH_FAILED', oldValue: input.kind, newValue: updated.lastError }, tx);
+        await writeAudit({ ...workerAudit(row, next.status === 'CHECK_MANUALLY' ? 'CHECK_MANUALLY' : 'PUSH_FAILED', updated.lastError), oldValue: input.kind }, tx);
       }
       if (input.kind === 'session_expired') {
         const p = await notifyAdmins(tx, row.reportId, 'iON session expired', 'The iON worker is logged out. Run "pnpm ion:login" on the worker PC, then Retry. No debit note was created.');

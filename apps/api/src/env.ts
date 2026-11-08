@@ -32,12 +32,14 @@ const schema = z.object({
     .transform((v) => v === 'true' || v === '1'),
   /** Which iON the jobs created here are for. The worker only takes jobs of the environment it is connected to. */
   ION_ENV: z.enum(['training', 'live']).default('training'),
-  /** dry_run | draft_only | full. Default: draft_only on live, full on training. On live this is the only mode; nobody can pick another. */
+  /** dry_run | draft_only | full. Default draft_only everywhere: set full explicitly to let jobs Submit. On live this is the only mode; nobody can pick another. */
   ION_RUN_MODE: blankToUndefined(z.enum(['dry_run', 'draft_only', 'full']).optional()),
   /** Shared secret of the worker PC, sent as a bearer token to /api/ion-worker. Unset = the worker API answers 503. */
   ION_WORKER_TOKEN: blankToUndefined(z.string().min(32, 'ION_WORKER_TOKEN must be at least 32 characters').optional()),
   /** A running job whose worker has been silent this long is treated as dead. */
   ION_HEARTBEAT_TIMEOUT_SECONDS: z.coerce.number().int().min(10).default(120),
+  /** Screenshots of successful pushes are thinned to the final one after this many days; those of failed / check_manually pushes are kept. */
+  ION_SCREENSHOT_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
   /** Automatic re-queues after a transient failure before anything exists in iON. */
   ION_MAX_AUTO_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
 });
@@ -59,6 +61,6 @@ if (
 }
 
 export const env = parsed.data;
-/** The run mode jobs get when the request does not (and, on live, always). */
-export const defaultIonRunMode = (): 'dry_run' | 'draft_only' | 'full' => env.ION_RUN_MODE ?? (env.ION_ENV === 'live' ? 'draft_only' : 'full');
+/** The run mode jobs get when the request does not (and, on live, always). Draft-only unless ION_RUN_MODE=full is set explicitly. */
+export const defaultIonRunMode = (): 'dry_run' | 'draft_only' | 'full' => env.ION_RUN_MODE ?? 'draft_only';
 export const isProduction = env.NODE_ENV === 'production';

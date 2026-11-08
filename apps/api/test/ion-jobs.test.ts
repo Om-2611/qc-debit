@@ -5,7 +5,7 @@ import { createApp } from '../src/app';
 import { env } from '../src/env';
 import { todayIst } from '../src/ion/money';
 import { prisma } from '../src/prisma';
-import { login, resetDatabase, seedEngineConfig, seedUsers, type Session } from './helpers';
+import { fakeJpeg, login, resetDatabase, seedEngineConfig, seedUsers, type Session } from './helpers';
 
 const app = createApp();
 const TOKEN = process.env.ION_WORKER_TOKEN!;
@@ -75,7 +75,9 @@ afterAll(async () => {
 
 // ---------------------------------------------------------------- helpers
 
-const create = (body: object = {}) => request(app).post(`/api/ion/reports/${reportId}/push`).set(admin.auth).send(body);
+/** Most scenarios need a full run; on live the server fixes the mode, so nothing is added there. */
+const create = (body: object = {}) => request(app).post(`/api/ion/reports/${reportId}/push`).set(admin.auth).send(env.ION_ENV === 'live' ? body : { runMode: 'full', ...body });
+const createDefault = () => request(app).post(`/api/ion/reports/${reportId}/push`).set(admin.auth).send({});
 const view = async (): Promise<IonReportViewDto> => (await request(app).get(`/api/ion/reports/${reportId}`).set(admin.auth)).body;
 const claimAs = (workerId: string, environment: 'training' | 'live' = 'training') => request(app).post('/api/ion-worker/claim').set(bearer).send({ workerId, env: environment });
 const w = (id: string, path: string, body: object) => request(app).post(`/api/ion-worker/pushes/${id}/${path}`).set(bearer).send(body);
@@ -135,6 +137,18 @@ describe('creating the job', () => {
     expect(saved.payload).toMatchObject({ amount: '1000.00', supplierCode: 'CRRM_140290', itemCode: 'RM-13001' });
     expect(saved.requestedById).toBe((await prisma.user.findFirstOrThrow({ where: { role: 'ADMIN' } })).id);
     expect(await prisma.auditLog.count({ where: { reportId, action: 'ION_PUSH_CREATE' } })).toBe(1);
+  });
+
+  it('without a run mode every job is draft-only, on training too: it stops before Submit', async () => {
+    const res = await createDefault();
+    expect(res.status).toBe(201);
+    expect(res.body.push).toMatchObject({ env: 'TRAINING', runMode: 'DRAFT_ONLY' });
+    expect(res.body.runMode).toBe('DRAFT_ONLY');
+    const job = (await claimAs('pc-1')).body;
+    await milestone(job.id, 'pc-1', 'draft_click');
+    await milestone(job.id, 'pc-1', 'draft_created', { dnNo: 'NL/APDN/4621' });
+    await editsDone(job.id, 'pc-1');
+    expect((await milestone(job.id, 'pc-1', 'submit_click')).status).toBe(409);
   });
 
   it('refuses with the pre-flight list while something is missing', async () => {
@@ -261,8 +275,8 @@ describe('a full run', () => {
     expect((await milestone(id, 'pc-1', 'submit_click')).status).toBe(409);
     expect((await milestone(id, 'pc-1', 'draft_created')).status).toBe(409); // no number given
 
-    const png = Buffer.from('89504e470d0a1a0a', 'hex');
-    const shot = await request(app).post(`/api/ion-worker/pushes/${id}/screenshots?workerId=pc-1&label=header-filled`).set(bearer).set('Content-Type', 'image/png').send(png);
+    const png = fakeJpeg(1280, 720, 64);
+    const shot = await request(app).post(`/api/ion-worker/pushes/${id}/screenshots?workerId=pc-1&label=header-filled`).set(bearer).set('Content-Type', 'image/jpeg').send(png);
     expect(shot.status).toBe(201);
     expect((await w(id, 'steps', { workerId: 'pc-1', step: 'B1 organization', outcome: 'ok', message: 'DPNL', screenshotId: shot.body.id })).status).toBe(204);
 
@@ -285,22 +299,39 @@ describe('a full run', () => {
     expect(v.push!.screenshots).toHaveLength(1);
     const image = await request(app).get(`/api/ion/screenshots/${shot.body.id}`).set(admin.auth);
     expect(image.status).toBe(200);
-    expect(image.headers['content-type']).toBe('image/png');
+    expect(image.headers['content-type']).toBe('image/jpeg');
     expect(Buffer.from(image.body).equals(png)).toBe(true);
     expect((await request(app).get(`/api/ion/screenshots/${shot.body.id}`).set(manager.auth)).status).toBe(403);
 
-    const audits = await prisma.auditLog.findMany({ where: { reportId, action: { in: ['ION_DRAFT_CREATED', 'ION_SUBMITTED'] } }, orderBy: { at: 'asc' } });
-    expect(audits.map((a) => [a.action, a.newValue])).toEqual([['ION_DRAFT_CREATED', 'NL/APDN/4621'], ['ION_SUBMITTED', 'NL/APDN/4621']]);
+    const audits = await prisma.auditLog.findMany({ where: { reportId, action: { in: ['ION_WORKER_DRAFT_CREATED', 'ION_WORKER_SUBMITTED'] } }, orderBy: { at: 'asc' } });
+    expect(audits.map((a) => [a.action, a.newValue])).toEqual([['ION_WORKER_DRAFT_CREATED', 'NL/APDN/4621 (by iON worker)'], ['ION_WORKER_SUBMITTED', 'NL/APDN/4621 (by iON worker)']]);
     // a submitted note cannot be loaded or retried again
     expect((await create()).status).toBe(409);
     expect((await request(app).post(`/api/ion/reports/${reportId}/retry`).set(admin.auth)).status).toBe(409);
   });
 
-  it('a screenshot that is not an image, or too large, is refused', async () => {
+  it('screenshots must be JPEG, at most 1600 px wide and small; the claim tells the worker the spec', async () => {
     const job = await queueAndClaim();
+    expect((await claimAs('pc-1')).status).toBe(204);
     const post = (type: string, body: Buffer) => request(app).post(`/api/ion-worker/pushes/${job.id}/screenshots?workerId=pc-1&label=x`).set(bearer).set('Content-Type', type).send(body);
     expect((await post('text/plain', Buffer.from('hi'))).status).toBe(415);
-    expect((await post('image/png', Buffer.alloc(3.5 * 1024 * 1024))).status).toBe(409);
+    const png = await post('image/png', Buffer.from('89504e470d0a1a0a', 'hex'));
+    expect(png.status).toBe(409);
+    expect(png.body.message).toContain('JPEG');
+    const notReally = await post('image/jpeg', Buffer.from('definitely not a jpeg'));
+    expect(notReally.status).toBe(409);
+    expect(notReally.body.message).toContain('readable JPEG');
+    const wide = await post('image/jpeg', fakeJpeg(1920, 1080));
+    expect(wide.status).toBe(409);
+    expect(wide.body.message).toContain('1920px');
+    expect((await post('image/jpeg', fakeJpeg(1600, 900, 1.6 * 1024 * 1024))).status).toBe(409); // too large
+    expect((await post('image/jpeg', fakeJpeg(1600, 900, 1024))).status).toBe(201);
+  });
+
+  it('the claim carries the screenshot spec', async () => {
+    await create();
+    const job = (await claimAs('pc-1')).body;
+    expect(job.config.screenshot).toEqual({ type: 'jpeg', quality: 60, maxWidth: 1600 });
   });
 });
 
