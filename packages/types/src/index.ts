@@ -6,3 +6,4 @@ export * from './admin';
 export * from './dashboard';
 export * from './import';
 export * from './notifications';
+export * from './ion';

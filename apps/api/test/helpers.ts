@@ -13,6 +13,7 @@ export const emailFor = (role: Role): string => `${role.toLowerCase()}@test.loca
 export async function resetDatabase(): Promise<void> {
   // Order matters only for tables without ON DELETE CASCADE.
   await prisma.auditLog.deleteMany();
+  await prisma.ionPush.deleteMany();
   await prisma.report.deleteMany();
   await prisma.importBatch.deleteMany();
   await prisma.refreshToken.deleteMany();

@@ -12,6 +12,7 @@ import { authRouter, meRouter } from './auth/auth.routes';
 import { requireAdmin, requireAuth } from './auth/middleware';
 import { dashboardRouter } from './dashboard/dashboard.routes';
 import { env } from './env';
+import { ionWorkerRouter } from './ion/ion-worker.routes';
 import { ionRouter } from './ion/ion.routes';
 import { importRouter } from './import/import.routes';
 import { errorHandler, notFoundHandler } from './lib/errors';
@@ -37,6 +38,9 @@ export function createApp(): express.Express {
 
   app.use('/api/auth', authRouter);
   app.use('/api/me', meRouter);
+
+  // The iON worker PC authenticates with its own token, not a user login.
+  app.use('/api/ion-worker', ionWorkerRouter);
 
   // Every route below requires a signed-in user; role guards are applied per router/route.
   app.use('/api', requireAuth);

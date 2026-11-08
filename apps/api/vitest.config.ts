@@ -12,6 +12,12 @@ process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgresql://dalmia:dalmia_dev@localhost:5433/dalmia_qc_test?schema=public';
 
+// The iON push is off by default; its tests switch it on.
+process.env.ION_PUSH_ENABLED = 'true';
+process.env.ION_ENV = 'training';
+delete process.env.ION_RUN_MODE;
+process.env.ION_WORKER_TOKEN = 'test-worker-token-0123456789-0123456789-abcdef';
+
 export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],

@@ -7,6 +7,9 @@ import { z } from 'zod';
 const here = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(here, '../../../.env') });
 
+/** A blank line in .env (KEY=) means unset. */
+const blankToUndefined = <T extends z.ZodTypeAny>(schema: T) => z.preprocess((v) => (v === '' ? undefined : v), schema);
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
@@ -22,6 +25,21 @@ const schema = z.object({
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().default('mailto:admin@dalmiapolypro.in'),
+  /** Master switch for "Load on TCS iON". Off by default everywhere; jobs are neither created nor handed to the worker while off. */
+  ION_PUSH_ENABLED: z
+    .enum(['true', 'false', '1', '0'])
+    .default('false')
+    .transform((v) => v === 'true' || v === '1'),
+  /** Which iON the jobs created here are for. The worker only takes jobs of the environment it is connected to. */
+  ION_ENV: z.enum(['training', 'live']).default('training'),
+  /** dry_run | draft_only | full. Default: draft_only on live, full on training. On live this is the only mode; nobody can pick another. */
+  ION_RUN_MODE: blankToUndefined(z.enum(['dry_run', 'draft_only', 'full']).optional()),
+  /** Shared secret of the worker PC, sent as a bearer token to /api/ion-worker. Unset = the worker API answers 503. */
+  ION_WORKER_TOKEN: blankToUndefined(z.string().min(32, 'ION_WORKER_TOKEN must be at least 32 characters').optional()),
+  /** A running job whose worker has been silent this long is treated as dead. */
+  ION_HEARTBEAT_TIMEOUT_SECONDS: z.coerce.number().int().min(10).default(120),
+  /** Automatic re-queues after a transient failure before anything exists in iON. */
+  ION_MAX_AUTO_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
 });
 
 const parsed = schema.safeParse({
@@ -41,4 +59,6 @@ if (
 }
 
 export const env = parsed.data;
+/** The run mode jobs get when the request does not (and, on live, always). */
+export const defaultIonRunMode = (): 'dry_run' | 'draft_only' | 'full' => env.ION_RUN_MODE ?? (env.ION_ENV === 'live' ? 'draft_only' : 'full');
 export const isProduction = env.NODE_ENV === 'production';

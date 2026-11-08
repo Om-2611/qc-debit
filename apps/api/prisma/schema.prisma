@@ -34,6 +34,34 @@ enum ReportSource {
   IMPORTED
 }
 
+/// queued -> running -> draft_created(dn) -> submitted(dn), or failed / failed_retryable / check_manually.
+enum IonPushStatus {
+  QUEUED
+  RUNNING
+  /// The iON draft exists and its number is stored. The job may still be working on it (see lockedBy / finishedAt).
+  DRAFT_CREATED
+  SUBMITTED
+  /// Stopped; Retry resumes the draft when there is one.
+  FAILED
+  /// Stopped before anything was created in iON, for a reason that fixes itself (invoice not booked yet, session expired, timeout).
+  FAILED_RETRYABLE
+  /// The job cannot tell whether iON saved or submitted. Never retried automatically.
+  CHECK_MANUALLY
+  /// A dry run (header filled, nothing saved) finished.
+  DRY_RUN_OK
+}
+
+enum IonRunMode {
+  DRY_RUN
+  DRAFT_ONLY
+  FULL
+}
+
+enum IonEnvironment {
+  TRAINING
+  LIVE
+}
+
 enum ParameterCategory {
   DISCRETIONARY
   NON_DISCRETIONARY
@@ -83,6 +111,7 @@ model User {
   auditLogs         AuditLog[]
   notifications     Notification[]
   pushSubscriptions PushSubscription[]
+  ionPushes         IonPush[]
 }
 
 /// One row per issued refresh token. Tokens rotate on every refresh; only a SHA-256 hash is stored.
@@ -272,6 +301,7 @@ model Report {
   shortageLines ShortageLine[]
   auditLogs     AuditLog[]
   notifications Notification[]
+  ionPushes     IonPush[]
 
   @@index([status])
   @@index([supplierId])
@@ -429,4 +459,92 @@ model PushSubscription {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+// ------------------------------------------------------------------ TCS iON push
+
+/// One attempt to create a QC report's debit note in TCS iON. At most one non-reset, non-dry-run row per report:
+/// the partial unique index IonPush_one_binding_per_report (see the ion_push migration) enforces it.
+model IonPush {
+  id       String         @id @default(cuid())
+  reportId String
+  report   Report         @relation(fields: [reportId], references: [id])
+  status   IonPushStatus  @default(QUEUED)
+  env      IonEnvironment
+  runMode  IonRunMode
+
+  /// Everything the worker types into iON, fixed when the job is created (see src/ion/preflight.ts).
+  payload               Json
+  /// Admin's per-report iON item code, when it differs from the material default.
+  itemCodeOverride      String?
+  /// Set when an admin ticked "I have checked the amount" for an imported report whose total differs from the sheet's.
+  mismatchConfirmedById String?
+  requestedById         String
+  requestedBy           User     @relation(fields: [requestedById], references: [id])
+  requestedAt           DateTime @default(now())
+
+  attempts        Int @default(0)
+  /// Automatic re-queues still allowed after a transient failure before the draft exists. A manual Retry refills it.
+  autoRetriesLeft Int @default(0)
+
+  /// The iON debit note number, stored the moment Save As Draft succeeds. Never changes once set.
+  ionDnNo         String?
+  ionStatus       String?
+  /// Furthest step of C-F finished (item_saved, taxes_done, expense_saved); lets a resume skip what is done.
+  checkpoint      String?
+  /// Written BEFORE the click, so a job that dies in between is known to be uncertain.
+  draftClickedAt  DateTime?
+  submitClickedAt DateTime?
+
+  lastError     String?
+  lastErrorStep String?
+  lastErrorKind String?
+
+  /// Worker holding the job, and its last sign of life. A stale heartbeat means the worker died.
+  lockedBy    String?
+  heartbeatAt DateTime?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+
+  /// Admin "reset push": the row is kept for the audit trail but no longer counts.
+  resetAt   DateTime?
+  resetById String?
+  resetNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  steps       IonPushStep[]
+  screenshots IonScreenshot[]
+
+  @@index([reportId])
+  @@index([status, env])
+}
+
+model IonPushStep {
+  id           String   @id @default(cuid())
+  pushId       String
+  push         IonPush  @relation(fields: [pushId], references: [id], onDelete: Cascade)
+  seq          Int
+  step         String
+  /// ok | error | info
+  outcome      String
+  message      String?
+  screenshotId String?
+  at           DateTime @default(now())
+
+  @@unique([pushId, seq])
+}
+
+/// Step screenshots, uploaded by the worker. Kept in the database so they survive redeploys and are backed up with it.
+model IonScreenshot {
+  id        String   @id @default(cuid())
+  pushId    String
+  push      IonPush  @relation(fields: [pushId], references: [id], onDelete: Cascade)
+  label     String
+  mime      String
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@index([pushId])
 }

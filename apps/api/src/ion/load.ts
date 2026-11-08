@@ -6,12 +6,20 @@ import { runPreflight, type PreflightInput, type PreflightResult } from './prefl
 
 const isoDate = (d: Date | null): string | null => (d ? d.toISOString().slice(0, 10) : null);
 
+/** The report's iON push that still counts: not reset, and not a dry run (dry runs save nothing in iON). */
+export async function bindingPush(reportId: string): Promise<{ status: string } | null> {
+  return prisma.ionPush.findFirst({
+    where: { reportId, resetAt: null, runMode: { not: 'DRY_RUN' } },
+    select: { status: true },
+  });
+}
+
 export interface PreflightOverrides {
   /** Per-report iON item code chosen by an admin. */
   itemCodeOverride?: string | null;
   /** "I have checked the amount", for an imported report whose total differs from the sheet's. */
   mismatchConfirmed?: boolean;
-  /** The report's iON push when it has one that has not been reset (comes from the job model). */
+  /** Defaults to the report's binding push; pass null to ignore it. */
   existingPush?: { status: string } | null;
 }
 
@@ -59,7 +67,7 @@ export async function loadPreflightInput(reportId: string, overrides: PreflightO
     shortageAmounts: report.shortageLines.map((s) => s.approvedAmount),
     itemCodeOverride: overrides.itemCodeOverride ?? null,
     mismatchConfirmed: overrides.mismatchConfirmed ?? false,
-    existingPush: overrides.existingPush ?? null,
+    existingPush: overrides.existingPush !== undefined ? overrides.existingPush : await bindingPush(reportId),
   };
 }
 
