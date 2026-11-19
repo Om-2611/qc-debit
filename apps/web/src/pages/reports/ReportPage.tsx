@@ -36,6 +36,7 @@ import { patchSection, postAction, useLookups, useReport, type WorkflowAction } 
 import { useAuth } from '../../auth/AuthContext';
 import { StatusChip } from '../../components/StatusChip';
 import { AuditDrawer } from './AuditDrawer';
+import { IonPanel } from './IonPanel';
 import { formatDate, formatINR } from '../../lib/format';
 import { buildPatch, fromDto, isDirty, liveOutput, type Draft } from './draft';
 import { MismatchChip } from './MismatchDrawer';
@@ -229,6 +230,8 @@ export function ReportPage() {
           Approved and locked. The figures below are the snapshot taken at approval and do not change when norms or rates are edited.
         </Alert>
       )}
+      {/* Loading the debit note on TCS iON: admin only, once the report has its final approval. The API enforces it too. */}
+      {user.role === 'ADMIN' && dto.status === 'APPROVED' && <IonPanel reportId={id} reportNo={dto.reportNo} />}
       {failure && (
         <Alert severity="error" onClose={() => setFailure(null)}>
           <AlertTitle>{failure.message}</AlertTitle>

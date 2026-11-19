@@ -116,6 +116,17 @@ export async function downloadFile(path: string): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+/** Fetches an authenticated file (an image, say) and returns an object URL for it. The caller revokes it when done. */
+export async function fetchBlobUrl(path: string): Promise<string> {
+  const send = (): Promise<Response> =>
+    fetch(`/api${path}`, { credentials: 'include', headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} });
+
+  let res = await send();
+  if (res.status === 401 && (await refreshSession())) res = await send();
+  if (!res.ok) throw await toError(res);
+  return URL.createObjectURL(await res.blob());
+}
+
 /**
  * POSTs a multipart form (file upload) with the same token and refresh handling as `api()`.
  * No Content-Type header is set: the browser adds it together with the multipart boundary.
